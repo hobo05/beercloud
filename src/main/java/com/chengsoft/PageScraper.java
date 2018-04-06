@@ -11,6 +11,7 @@ import org.jsoup.select.Elements;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -20,7 +21,14 @@ import static java.util.stream.Collectors.toList;
 public class PageScraper {
 
     public static final String PAGE_REGEX = "/beer/([a-zA-Z0-9\\-]+)/(\\d+)/(\\d+)/(\\d+)/";
-    private OkHttpClient client = new OkHttpClient();
+    private OkHttpClient client;
+
+    public PageScraper() {
+        this.client = new OkHttpClient.Builder()
+                .readTimeout(30, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                .build();
+    }
 
     public List<String> findReviews(String html) {
         Document document = Jsoup.parse(html);
@@ -56,11 +64,11 @@ public class PageScraper {
                 .collect(Collectors.toList());
     }
 
-    public List<String> downloadAllReviews(String baseUrl, String beerPageUrl) {
+    public List<String> downloadAllReviews(String baseUrl, String beerPageUrl, int maxReviews) {
         String firstPageHtml = getHtml(beerPageUrl);
         List<String> firstPageReviews = findReviews(firstPageHtml);
 
-        List<String> pageUrls = findPages(firstPageHtml, 10);
+        List<String> pageUrls = findPages(firstPageHtml, maxReviews);
         Stream<String> otherReviews = pageUrls.parallelStream()
                 .map(url -> baseUrl + url)
                 .map(this::getHtml)
@@ -77,7 +85,7 @@ public class PageScraper {
         try (Response response = client.newCall(request).execute()) {
             return response.body().string();
         } catch (IOException e) {
-            throw new RuntimeException("Error trying to call " + url);
+            throw new RuntimeException("Error trying to call " + url, e);
         }
     }
 }
